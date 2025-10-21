@@ -1,0 +1,3 @@
+# Core dependencies
+# Network scanning dependencies will be added as needed
+# Example: scapy, python-nmap, etc.
