@@ -4,6 +4,7 @@ Network Inventory Scanner
 Scans the local network and displays device information in a table.
 """
 
+import requests
 import sys
 import socket
 import ipaddress
@@ -12,27 +13,26 @@ from scapy.all import ARP, Ether, srp, conf
 from tabulate import tabulate
 
 
-def get_mac_vendor(mac_address):
+def get_mac_details(mac_address):
     """
     Get the vendor name for a MAC address.
-    Uses Scapy's built-in MAC manufacturer database when available.
+    Uses MacVendors API to determine the vendor of a network device.
     
     Args:
         mac_address: MAC address string
         
     Returns:
-        Vendor name or 'Unknown' if not found
+        Vendor name or 'Invalid MAC {mac_address}' else
     """
-    try:
-        from scapy.all import conf
-        vendor = conf.manufdb._get_manuf(mac_address)
-        # If vendor equals the MAC address, the lookup failed
-        if vendor and vendor != mac_address:
-            return vendor
-        return "Unknown"
-    except Exception:
-        return "Unknown"
-
+    
+    # We will use an API to get the vendor details
+    url = "https://api.macvendors.com/"
+    print(f"Fetching vendor for MAC: {mac_address}")
+    # Use get method to fetch details
+    response = requests.get(url+mac_address)
+    if response.status_code != 200:
+        return f"Invalid MAC {mac_address}"
+    return response.content.decode()
 
 def get_hostname(ip_address):
     """
@@ -79,7 +79,7 @@ def scan_network(network_range):
             'ip': received.psrc,
             'mac': received.hwsrc,
             'hostname': get_hostname(received.psrc),
-            'vendor': get_mac_vendor(received.hwsrc)
+            'vendor': get_mac_details(received.hwsrc)
         }
         devices.append(device_info)
     
