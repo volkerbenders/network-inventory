@@ -45,4 +45,23 @@ network-inventory/
 
 ## Usage
 
-The package is currently in development. More features coming soon! 
+The package is currently in development. Here's a basic example:
+
+```python
+from network_inventory.scanner import NetworkScanner
+
+# Create a scanner for your network
+scanner = NetworkScanner(network_range="192.168.1.0/24")
+
+# Scan the network
+devices = scanner.scan()
+```
+
+See `example.py` for a complete working example.
+
+Run the example:
+```bash
+python3 example.py
+```
+
+More features coming soon! 
