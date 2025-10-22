@@ -35,6 +35,11 @@ def init_logger():
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     ch.setFormatter(formatter)
     logger.addHandler(ch)
+    fh = logging.FileHandler("network_scanner.log")
+    fh.setLevel(logging.DEBUG)  
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
     return logger
 
 logger = init_logger()
