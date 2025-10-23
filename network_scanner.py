@@ -17,10 +17,17 @@ import ipaddress
 import argparse
 from scapy.all import ARP, Ether, srp, conf
 from tabulate import tabulate
-from mac_vendor_lookup import MacLookup
 from time import sleep
 
-mac_lookup = MacLookup()
+# import the caching helpers
+from mac_vendor_cache import (
+    add_vendor_to_cache,
+    get_vendor_from_cache,
+    check_vendor_cache,
+    initialize_mac_vendor_cache,
+    write_vendor_cache_to_file,
+)
+
 
 vendor_cache = {}
 
@@ -69,7 +76,6 @@ def get_mac_details(mac_address):
     Returns:
         Vendor name or 'Invalid MAC {mac_address}' else
     """
-    #return mac_lookup.lookup(mac_address)
     # We will use an API to get the vendor details
 
     if check_vendor_cache(mac_address):
