@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from mac_vendor_cache import MacVendorCache
+from vendor_cache import VendorCache
 import mac_vendor_cache as mvc
 
 
@@ -13,14 +13,16 @@ def test_initialize_loads_file(tmp_path):
     data = {"AA:BB:CC:DD:EE:FF": "TestVendor"}
     p.write_text(json.dumps(data), encoding="utf-8")
 
-    cache = MacVendorCache(str(p))
-    assert cache.has("AA:BB:CC:DD:EE:FF")
-    assert cache.get("AA:BB:CC:DD:EE:FF") == "TestVendor (cached)"
+    cache = VendorCache()
+    cache.initialize_mac_vendor_cache()
+    assert cache.check_vendor_cache("AA:BB:CC:DD:EE:FF")
+    assert cache.get_vendor_from_cache("AA:BB:CC:DD:EE:FF") == "TestVendor (cached)"
 
 
 def test_add_get_has(tmp_path):
     p = tmp_path / "cache2.json"
-    cache = MacVendorCache(str(p))
+    cache = VendorCache()
+    cache.initialize_mac_vendor_cache()
 
     mac = "00:11:22:33:44:55"
     assert not cache.has(mac)
@@ -32,16 +34,18 @@ def test_add_get_has(tmp_path):
 
 def test_write_and_reload(tmp_path):
     p = tmp_path / "cache3.json"
-    cache = MacVendorCache(str(p))
+    cache = VendorCache()
+    cache.initialize_mac_vendor_cache()
 
     mac = "11:22:33:44:55:66"
     cache.add(mac, "VendorY")
     cache.write_to_file()
 
     # New instance should load persisted data
-    cache2 = MacVendorCache(str(p))
-    assert cache2.has(mac)
-    assert cache2.get(mac) == "VendorY (cached)"
+    cache2 = VendorCache()
+    cache2.initialize_mac_vendor_cache()
+    assert cache2.check_vendor_cache(mac)
+    assert cache2.get_vendor_from_cache(mac) == "VendorY (cached)"
 
 
 def test_module_wrappers_use_isolated_instance(tmp_path, monkeypatch):
