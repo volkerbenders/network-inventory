@@ -182,8 +182,9 @@ def print_results(devices):
     
     # Prepare table data
     table_data = []
-    for device in devices:
+    for i, device in enumerate(devices):
         table_data.append([
+            i,
             device['mac'],
             device['ip'],
             device['hostname'],
@@ -191,7 +192,7 @@ def print_results(devices):
         ])
     
     # Print table
-    headers = ['MAC Address', 'IPv4 Address', 'Hostname', 'Vendor']
+    headers = ['#', 'MAC Address', 'IPv4 Address', 'Hostname', 'Vendor']
     print(tabulate(table_data, headers=headers, tablefmt='grid'))
     print(f"\nTotal devices found: {len(devices)}")
 cache_path = "mac_vendor_cache.json"
