@@ -4,35 +4,95 @@ Network Inventory Scanner
 Scans the local network and displays device information in a table.
 """
 
+from asyncio.log import logger
+import json
+from linecache import cache
+import logging
+from math import log
+import re
+import requests
 import sys
 import socket
 import ipaddress
 import argparse
 from scapy.all import ARP, Ether, srp, conf
 from tabulate import tabulate
+from time import sleep
+
+# import the caching helpers
+from mac_vendor_cache import (
+    add_vendor_to_cache,
+    get_vendor_from_cache,
+    check_vendor_cache,
+    initialize_mac_vendor_cache,
+    write_vendor_cache_to_file,
+)
 
 
-def get_mac_vendor(mac_address):
+vendor_cache = {}
+
+def init_logger():
+    """Initialize logger for the application."""
+    #import logging
+    #global logger
+    logger = logging.getLogger("network_scanner")
+    logger.setLevel(logging.DEBUG)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+    fh = logging.FileHandler("network_scanner.log")
+    fh.setLevel(logging.DEBUG)  
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    return logger
+
+logger = init_logger()
+
+def add_vendor_to_cache(mac_address, vendor_name):
+    """Add vendor name to cache for a given MAC address."""
+    logger.debug(f"+ + + Caching vendor for {mac_address}: {vendor_name}")    
+    vendor_cache[mac_address] = vendor_name
+def get_vendor_from_cache(mac_address):
+    """Retrieve vendor name from cache for a given MAC address."""
+    logger.debug(f"- - - Retrieving vendor from cache for {mac_address}")
+    return vendor_cache.get(mac_address)+" (cached)"
+
+def check_vendor_cache(mac_address):
+    """Check if vendor name is in cache for a given MAC address."""
+    logger.debug(f". . . Checking vendor cache for {mac_address}")
+    return mac_address in vendor_cache
+
+def get_mac_details(mac_address):
     """
     Get the vendor name for a MAC address.
-    Uses Scapy's built-in MAC manufacturer database when available.
+    Uses MacVendors API to determine the vendor of a network device.
     
     Args:
         mac_address: MAC address string
         
     Returns:
-        Vendor name or 'Unknown' if not found
+        Vendor name or 'Invalid MAC {mac_address}' else
     """
-    try:
-        from scapy.all import conf
-        vendor = conf.manufdb._get_manuf(mac_address)
-        # If vendor equals the MAC address, the lookup failed
-        if vendor and vendor != mac_address:
-            return vendor
-        return "Unknown"
-    except Exception:
-        return "Unknown"
+    # We will use an API to get the vendor details
 
+    if check_vendor_cache(mac_address):
+        return get_vendor_from_cache(mac_address)
+    logger.debug(f"Vendor not found in cache for {mac_address}, querying API...")
+
+    url = "https://api.macvendors.com/"
+    logger.debug(f"Fetching vendor for MAC: {mac_address}")
+    # Use get method to fetch details
+    response = requests.get(url+mac_address)
+    if response.status_code == 404:
+        return f"Unknown Vendor {mac_address}"
+    elif response.status_code != 200:
+        return f"Invalid MAC {mac_address}, Status Code: {response.status_code}"
+    vendor = response.content.decode()
+    add_vendor_to_cache(mac_address, vendor)
+    return vendor
 
 def get_hostname(ip_address):
     """
@@ -72,17 +132,19 @@ def scan_network(network_range):
     # Send packet and receive responses
     # timeout=3, verbose=False to suppress output
     answered_list = srp(arp_request_broadcast, timeout=3, verbose=False)[0]
-    
+    logger.debug(f">>> Received {len(answered_list)} responses")
     devices = []
     for sent, received in answered_list:
         device_info = {
             'ip': received.psrc,
             'mac': received.hwsrc,
             'hostname': get_hostname(received.psrc),
-            'vendor': get_mac_vendor(received.hwsrc)
+            'vendor': get_mac_details(received.hwsrc)
         }
         devices.append(device_info)
+        sleep(1.0)  # Add a small delay to avoid overwhelming the API
     
+
     return devices
 
 
@@ -120,8 +182,9 @@ def print_results(devices):
     
     # Prepare table data
     table_data = []
-    for device in devices:
+    for i, device in enumerate(devices):
         table_data.append([
+            i,
             device['mac'],
             device['ip'],
             device['hostname'],
@@ -129,10 +192,28 @@ def print_results(devices):
         ])
     
     # Print table
-    headers = ['MAC Address', 'IPv4 Address', 'Hostname', 'Vendor']
+    headers = ['#', 'MAC Address', 'IPv4 Address', 'Hostname', 'Vendor']
     print(tabulate(table_data, headers=headers, tablefmt='grid'))
     print(f"\nTotal devices found: {len(devices)}")
+cache_path = "mac_vendor_cache.json"
 
+def initialize_mac_vendor_cache():
+    """Initialize the MAC vendor cache from local database."""
+    try:
+        breakpoint()
+        with open(cache_path, "r", encoding="utf-8") as f:
+            vendor_cache = json.load(f)
+    except Exception as e:
+        logger.error(f"Could not load MAC vendor cache from file. {e}")
+        pass
+
+def write_vendor_cache_to_file():
+    """Write the MAC vendor cache to a local file."""
+    try:
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump(vendor_cache, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
 
 def main():
     """Main function to run the network scanner."""
@@ -149,7 +230,7 @@ Note: This script may require root/administrator privileges to send ARP packets.
 On Linux/Mac, run with 'sudo'. On Windows, run as Administrator.
         """
     )
-    
+    initialize_mac_vendor_cache()
     parser.add_argument(
         '-n', '--network',
         type=str,
@@ -173,7 +254,7 @@ On Linux/Mac, run with 'sudo'. On Windows, run as Administrator.
     try:
         ipaddress.IPv4Network(network_range)
     except ValueError as e:
-        print(f"Error: Invalid network range '{network_range}': {e}")
+        logger.error(f"Error: Invalid network range '{network_range}': {e}")
         sys.exit(1)
     
     # Check if running with appropriate privileges
@@ -183,17 +264,17 @@ On Linux/Mac, run with 'sudo'. On Windows, run as Administrator.
         
         # Scan the network
         devices = scan_network(network_range)
-        
+        write_vendor_cache_to_file()
         # Print results
         print_results(devices)
         
     except PermissionError:
-        print("Error: Permission denied. This script requires root/administrator privileges.")
-        print("On Linux/Mac: Run with 'sudo python network_scanner.py'")
-        print("On Windows: Run terminal as Administrator")
+        logger.error("Error: Permission denied. This script requires root/administrator privileges.")
+        logger.error("On Linux/Mac: Run with 'sudo python network_scanner.py'")
+        logger.error("On Windows: Run terminal as Administrator")
         sys.exit(1)
     except Exception as e:
-        print(f"Error during scan: {e}")
+        logger.error(f"Error during scan: {e}")
         sys.exit(1)
 
 
